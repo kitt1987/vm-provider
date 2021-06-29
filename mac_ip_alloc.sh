@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 
+set -e
+
 hostname=$1
 ipPrefix=${2:-10.38.}
 
-DNSConf=/etc/dnsmasq.d/vm
+DHCPConfig=/etc/dnsmasq.d/vm-dhcp.conf
+DNSConfig=/etc/dnsmasq.d/vm-dns.conf
 
-ExistedRescord=$(grep -w ${hostname} ${DNSConf})
+(
+flock 500
+
+if [ -f ${DHCPConfig} ]; then
+	ExistedRescord=$(grep -w ${hostname} ${DHCPConfig})
+fi
 
 mac1=08
 mac2=00
@@ -27,11 +35,14 @@ NextMac6=01
 NextIP3=1
 NextIP4=1
 
-LastRecord=$(tail -1 ${DNSConf})
+if [ -f ${DHCPConfig} ]; then
+	LastRecord=$(tail -1 ${DHCPConfig})
+fi
+
 if [ "${LastRecord}" != "" ]; then
 	LastMac=$(echo ${LastRecord} | cut -d "=" -f 2 | awk -F ',' '{ print $1 }')
 	LastIP=$(echo ${LastRecord} | cut -d "=" -f 2 | awk -F ',' '{ print $3 }')
-	
+
 	if [ "${LastMac}" != "" ]; then
 		NextMac4=$((16#$(echo ${LastMac} | awk -F ':' '{ print $4 }')))
 		NextMac5=$((16#$(echo ${LastMac} | awk -F ':' '{ print $5 }')))
@@ -54,7 +65,7 @@ if [ "${LastRecord}" != "" ]; then
 		NextMac5=$(printf "%02x\n" ${NextMac5})
 		NextMac6=$(printf "%02x\n" ${NextMac6})
 	fi
-	
+
 	if [ "${LastIP}" != "" ]; then
 		NextIP3=$(($(echo ${LastIP} | awk -F '.' '{ print $3 }')))
 		NextIP4=$(($(echo ${LastIP} | awk -F '.' '{ print $4 }')))
@@ -72,8 +83,12 @@ fi
 
 ip=${ipPrefix}${NextIP3}.${NextIP4}
 
-echo "dhcp-host=${mac1}:${mac2}:${mac3}:${NextMac4}:${NextMac5}:${NextMac6},${hostname},${ip},infinite" >> ${DNSConf}
-
-systemctl restart dnsmasq
+echo "dhcp-host=${mac1}:${mac2}:${mac3}:${NextMac4}:${NextMac5}:${NextMac6},${hostname},${ip},infinite" >> ${DHCPConfig}
+echo "address=/${hostname}/${ip}" >> ${DNSConfig}
+service dnsmasq restart
 
 echo ${mac1}${mac2}${mac3}${NextMac4}${NextMac5}${NextMac6} ${ip}
+
+) 500>/var/lock/mac_ip_alloc
+
+set +e
