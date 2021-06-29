@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 hostname=$1
+ipPrefix=${2:-10.38.}
 
 DNSConf=/etc/dnsmasq.d/vm
 
@@ -69,7 +70,7 @@ if [ "${LastRecord}" != "" ]; then
 	fi
 fi
 
-ip=10.38.${NextIP3}.${NextIP4}
+ip=${ipPrefix}${NextIP3}.${NextIP4}
 
 echo "dhcp-host=${mac1}:${mac2}:${mac3}:${NextMac4}:${NextMac5}:${NextMac6},${hostname},${ip},infinite" >> ${DNSConf}
 
